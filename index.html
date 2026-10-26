@@ -1,0 +1,1015 @@
+<!-- ============================================================
+     ARQUITECTURA Estimula+
+     - Single-file HTML. Persistencia en localStorage.
+     - Fotos custom: guardadas como dataURL comprimida (canvas).
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#FFF8F0">
+    <title>Estimula+</title>
+    
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23B8C6DB%22/><text y=%2250%22 x=%2250%22 dy=%22.35em%22 text-anchor=%22middle%22 font-size=%2260%22>🧠</text></svg>">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        background: '#FFF8F0', surface: '#FFF0E0', primary: '#3D2B1F',
+                        accent: '#F4A460', accentDark: '#C0804A', accentLight: '#FFE0B2',
+                        warm: '#FF8C69', warmLight: '#FFF3E0', white: '#FFFFFF',
+                        success: '#4CAF50', successLight: '#E8F5E9',
+                    },
+                    fontFamily: { sans: ['"Nunito"', 'system-ui', '-apple-system', 'sans-serif'] },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(61, 43, 31, 0.12)',
+                        'card': '0 8px 24px -4px rgba(61, 43, 31, 0.08), 0 2px 8px -2px rgba(61, 43, 31, 0.04)',
+                        'warm': '0 4px 16px rgba(244, 164, 96, 0.3)',
+                    },
+                    fontSize: { 'base': ['1.0625rem', { lineHeight: '1.6' }] }
+                }
+            }
+        }
+    </script>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.460.0?deps=react@18.2.0"
+        }
+    }
+    </script>
+
+    <style>
+        body {
+            overscroll-behavior: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            background-color: #FFF8F0;
+            color: #3D2B1F;
+            font-family: 'Nunito', system-ui, sans-serif;
+            font-size: 17px;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #F4A460; border-radius: 20px; }
+        
+        .fade-in { animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .btn-press { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+        .btn-press:active { transform: scale(0.96); box-shadow: none; }
+        
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #FFF8F0; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+            transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 48px; height: 48px; border: 5px solid #FFE0B2;
+            border-top: 5px solid #F4A460; border-radius: 50%;
+            animation: spin 0.9s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .pop-in { animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .float { animation: float 3s ease-in-out infinite; }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        .confetti { 
+            position: fixed; width: 10px; height: 10px; 
+            animation: confettiFall linear forwards;
+            border-radius: 2px; z-index: 1000; pointer-events: none;
+        }
+
+        input, button { font-family: 'Nunito', sans-serif; }
+        
+        @keyframes softPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(244, 164, 96, 0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(244, 164, 96, 0); }
+        }
+        .pulse-warm { animation: softPulse 2.5s ease-in-out infinite; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .fade-in, .pop-in, .float, .pulse-warm, .confetti { animation: none !important; transition: none !important; }
+            .btn-press { transition: none !important; }
+        }
+    </style>
+</head>
+<body class="h-[100dvh] w-screen overflow-hidden flex justify-center bg-background">
+    
+    <div id="loading">
+        <div class="spinner"></div>
+        <div style="font-family: 'Nunito', sans-serif; color: #3D2B1F; font-weight: 800; font-size: 18px; letter-spacing: -0.5px;">Cargando Estimula+... 🧠</div>
+    </div>
+
+    <div id="root" class="h-full w-full max-w-lg bg-background shadow-2xl relative flex flex-col"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Volume2, VolumeX, Home, Play, Grid, HelpCircle, MessageSquare, 
+            ScanEye, Puzzle, Heart, CheckCircle, User,
+            Trash2, Minimize, Maximize, TrendingUp, ClipboardList,
+            Brain, Plus, Lock, Users, UserPlus, Mail, Info, Instagram,
+            Music, Timer, BookOpen, X, Image as ImageIcon, RefreshCw, Layers, Type, Coffee,
+            Sun, Flower, Camera, Bed, PawPrint, Key, Footprints, Clock, Sandwich, Armchair, GlassWater, Glasses, Droplets, Apple,
+            Car, Phone, Pizza, IceCream, Bus, Train, Shirt, Pencil, Hammer, Fish, Tv, Watch, Truck, Ship, Sofa,
+            Banana, Carrot, CloudRain, CloudSnow, Wind, Tent, Building, Factory, Castle, Church, Hotel, School, Activity, 
+            Store, Lightbulb, Fan, Plug, Battery, Notebook, Folder, ShoppingBag, Wallet, Coins, Calculator, AlarmClock, 
+            Globe, Laptop, Headphones, Citrus, Soup, Cat
+        } from 'lucide-react';
+
+        // --- ERROR BOUNDARY GLOBAL ---
+        class RootErrorBoundary extends React.Component {
+            constructor(p) { super(p); this.state = { error: null }; }
+            static getDerivedStateFromError(error) { return { error }; }
+            componentDidCatch(error, info) { console.error('ROOT ERROR:', error, info); }
+            render() {
+                if (this.state.error) {
+                    return React.createElement('div', { style: { padding: 24, fontFamily: 'monospace', background: '#FFF8F0', minHeight: '100vh', color: '#3D2B1F' } },
+                        React.createElement('h2', { style: { color: '#b91c1c' } }, '❌ Error al cargar la app'),
+                        React.createElement('p', { style: { fontWeight: 'bold' } }, this.state.error.message),
+                        React.createElement('button', { onClick: () => window.location.reload(), style: { marginTop: 20, padding: 15 } }, "Reintentar")
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // --- HELPERS (A PRUEBA DE SANDBOX) ---
+        const memoryStorage = {};
+        const safeGetItem = (key) => { try { return localStorage.getItem(key); } catch (e) { return memoryStorage[key] || null; } };
+        const safeSetItem = (key, value) => { try { localStorage.setItem(key, value); return true; } catch (e) { memoryStorage[key] = value; return false; } };
+        const safeRemoveItem = (key) => { try { localStorage.removeItem(key); } catch (e) { delete memoryStorage[key]; } };
+
+        const fileToDataURL = (file, maxSize = 800, quality = 0.8) => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        try {
+                            let w = img.width, h = img.height;
+                            if (w > maxSize || h > maxSize) {
+                                if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+                                else { w = Math.round(w * maxSize / h); h = maxSize; }
+                            }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = w; canvas.height = h;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, w, h);
+                            resolve(canvas.toDataURL('image/jpeg', quality));
+                        } catch (err) { reject(err); }
+                    };
+                    img.onerror = reject;
+                    img.src = e.target.result;
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        };
+
+        const calculateStreak = (history) => {
+            if (!history || history.length === 0) return 0;
+            const uniqueDates = [...new Set(history.map(h => new Date(h.date).toDateString()))]
+                .map(d => { const dt = new Date(d); dt.setHours(0,0,0,0); return dt; })
+                .sort((a, b) => b - a);
+            if (uniqueDates.length === 0) return 0;
+            const today = new Date(); today.setHours(0,0,0,0);
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+            const mostRecent = uniqueDates[0];
+            if (mostRecent.getTime() !== today.getTime() && mostRecent.getTime() !== yesterday.getTime()) return 0;
+            let streak = 1, prev = mostRecent;
+            for (let i = 1; i < uniqueDates.length; i++) {
+                if ((prev.getTime() - uniqueDates[i].getTime()) / (86400000) === 1) { streak++; prev = uniqueDates[i]; }
+                else break;
+            }
+            return streak;
+        };
+
+        const Spoon = ({ className, strokeWidth = 2 }) => React.createElement('svg',
+            { xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth, strokeLinecap: "round", strokeLinejoin: "round", className },
+            React.createElement('path', { d: "M12 22v-9" }), React.createElement('path', { d: "M12 13a4 4 0 0 0 4-4c0-3.1-2.2-5-4-5s-4 1.9-4 5a4 4 0 0 0 4 4z" })
+        );
+
+        const GAME_INFO = {
+            memory: { title: "Memoria", desc: "Encuentra las parejas de imágenes iguales.", example: "Ejemplo: Toca una carta para voltearla y busca otra igual." },
+            quiz: { title: "¿Quién es?", desc: "Selecciona la imagen que corresponde a la palabra.", example: "Ejemplo: Si aparece 'Manzana', toca el dibujo de la manzana." },
+            sentences: { title: "Frases", desc: "Elige la imagen que completa la frase.", example: "Ejemplo: 'Duermo en la...', toca la cama." },
+            differences: { title: "Diferente", desc: "Encuentra la imagen que no es igual.", example: "Ejemplo: Si hay tres perros y un gato, toca el gato." },
+            music: { title: "Música", desc: "Repite la secuencia de luces.", example: "Ejemplo: Si se ilumina Rojo y luego Azul, toca Rojo y Azul." },
+            recall_word: { title: "Fugaz (Palabras)", desc: "Memoriza la imagen y elige la palabra.", example: "Ejemplo: Verás un 'Coche'. Al desaparecer, toca 'Coche'." },
+            recall_image: { title: "Fugaz (Dibujos)", desc: "Memoriza la imagen y elige el dibujo.", example: "Ejemplo: Verás una 'Flor'. Al desaparecer, tócala." },
+            puzzle: { title: "Rompecabezas", desc: "Ordena las piezas para formar la imagen.", example: "Ejemplo: Toca dos piezas para intercambiarlas." },
+            wordsearch: { title: "Sopa de Letras", desc: "Encuentra las palabras escondidas.", example: "Ejemplo: Toca las letras de 'GATO' una a una." },
+            progress: { title: "Registro", desc: "Tu historial de partidas.", example: "Juega todos los días para aumentar tu racha." },
+            gallery: { title: "Mis Fotos", desc: "Añade fotos para usarlas en los juegos.", example: "Sube una foto, ponle nombre y aparecerá en los juegos." }
+        };
+
+        let globalAudioCtx = null, audioUnlocked = false, voices = [];
+        const unlockAudio = () => {
+            if (audioUnlocked) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!globalAudioCtx) globalAudioCtx = new AudioContext();
+                if (globalAudioCtx.state === 'suspended') globalAudioCtx.resume();
+                if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance(''); u.volume = 0; window.speechSynthesis.speak(u); }
+                audioUnlocked = true;
+                document.removeEventListener('click', unlockAudio);
+                document.removeEventListener('touchstart', unlockAudio);
+            } catch (e) {}
+        };
+        document.addEventListener('click', unlockAudio);
+        document.addEventListener('touchstart', unlockAudio);
+
+        const playSound = (type) => {
+            try {
+                if (!globalAudioCtx) globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = globalAudioCtx;
+                if (ctx.state === 'suspended') ctx.resume();
+                const osc = ctx.createOscillator(), gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                const now = ctx.currentTime;
+                if (type === 'flip') { osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(now); osc.stop(now + 0.1); }
+                else if (type === 'match') { osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.setValueAtTime(600, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3); osc.start(now); osc.stop(now + 0.3); }
+                else if (type === 'correct') { osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now); osc.frequency.linearRampToValueAtTime(880, now + 0.1); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5); osc.start(now); osc.stop(now + 0.5); }
+                else if (type === 'win') { osc.type = 'triangle'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(600, now + 0.5); gain.gain.setValueAtTime(0.1, now); gain.gain.linearRampToValueAtTime(0.1, now + 0.5); gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0); osc.start(now); osc.stop(now + 1.0); }
+                else if (type === 'swap') { osc.type = 'sine'; osc.frequency.setValueAtTime(150, now); gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15); osc.start(now); osc.stop(now + 0.15); }
+            } catch (e) {}
+        };
+
+        const playGameNote = (index, duration = 0.8) => {
+            try {
+                if (!globalAudioCtx) globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const ctx = globalAudioCtx; if (ctx.state === 'suspended') ctx.resume();
+                const osc = ctx.createOscillator(), gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = 'sine'; osc.frequency.value = [261.63, 329.63, 392.00, 523.25][index];
+                const now = ctx.currentTime;
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.2, now + Math.min(0.05, duration * 0.1)); gain.gain.exponentialRampToValueAtTime(0.001, now + duration); 
+                osc.start(now); osc.stop(now + duration);
+            } catch (e) {}
+        };
+
+        const loadVoices = () => { if (window.speechSynthesis) voices = window.speechSynthesis.getVoices(); };
+        if (window.speechSynthesis) { window.speechSynthesis.onvoiceschanged = loadVoices; loadVoices(); setTimeout(loadVoices, 1000); }
+
+        const speakText = (text) => {
+            if (!window.speechSynthesis) return;
+            window.speechSynthesis.cancel(); unlockAudio();
+            const u = new SpeechSynthesisUtterance(text);
+            let pref = voices.find(v => v.lang.includes('es') && (v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Enhanced'))) || voices.find(v => v.lang.includes('es'));
+            if (pref) u.voice = pref;
+            u.lang = 'es-ES'; u.rate = 0.9; u.pitch = 1.0;
+            window.speechSynthesis.speak(u);
+        };
+
+        const GameLayout = ({ title, children, goHome, soundEnabled, setSoundEnabled, onRestart, onLevelSelect, helpKey, onHelp }) => {
+            const [showConfirm, setShowConfirm] = useState(false);
+            return React.createElement('div', { className: "h-full flex flex-col bg-background relative" },
+                React.createElement('header', { className: "bg-white py-3 shadow-soft flex items-center justify-center z-10 relative h-[68px] border-b border-accent/20" },
+                    React.createElement('div', { className: "absolute left-3 flex gap-2" },
+                        goHome && React.createElement('button', { onClick: goHome, className: "p-3 bg-warmLight rounded-2xl text-primary shadow-sm btn-press min-w-[44px] min-h-[44px] flex items-center justify-center" }, React.createElement(Home, { className: "w-6 h-6" })),
+                        onLevelSelect && React.createElement('button', { onClick: onLevelSelect, className: "p-3 bg-warmLight rounded-2xl text-primary shadow-sm btn-press min-w-[44px] min-h-[44px] flex items-center justify-center" }, React.createElement(Layers, { className: "w-6 h-6" })),
+                        onRestart && React.createElement('button', { onClick: () => setShowConfirm(true), className: "p-3 bg-warmLight rounded-2xl text-primary shadow-sm btn-press min-w-[44px] min-h-[44px] flex items-center justify-center" }, React.createElement(RefreshCw, { className: "w-6 h-6" }))
+                    ),
+                    React.createElement('span', { className: "font-extrabold text-primary text-xl truncate px-32 text-center pointer-events-none" }, title),
+                    React.createElement('div', { className: "absolute right-3 flex gap-2" },
+                        helpKey && React.createElement('button', { onClick: () => onHelp(helpKey), className: "p-3 bg-accentLight/60 rounded-2xl text-primary shadow-sm btn-press min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-accentLight" }, React.createElement(HelpCircle, { className: "w-6 h-6 text-accentDark" })),
+                        React.createElement('button', { onClick: () => setSoundEnabled(!soundEnabled), className: `p-3 rounded-2xl btn-press min-w-[44px] min-h-[44px] flex items-center justify-center ${soundEnabled ? 'bg-warmLight text-primary shadow-sm' : 'bg-transparent text-primary/40'}` }, soundEnabled ? React.createElement(Volume2, { className: "w-6 h-6" }) : React.createElement(VolumeX, { className: "w-6 h-6" }))
+                    )
+                ),
+                React.createElement('main', { className: "flex-1 p-4 flex flex-col items-center justify-center overflow-hidden relative" }, children),
+                showConfirm && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 fade-in" },
+                    React.createElement('div', { className: "bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full text-center" },
+                        React.createElement('h3', { className: "text-2xl font-extrabold text-primary mb-2" }, "¿Reiniciar juego?"),
+                        React.createElement('div', { className: "flex gap-3 mt-6" },
+                            React.createElement('button', { onClick: () => setShowConfirm(false), className: "flex-1 bg-surface text-primary/70 font-bold py-4 rounded-2xl btn-press" }, "No"),
+                            React.createElement('button', { onClick: () => { setShowConfirm(false); onRestart(); }, className: "flex-1 bg-warm text-white font-bold py-4 rounded-2xl btn-press shadow-warm" }, "Sí")
+                        )
+                    )
+                )
+            );
+        };
+
+        class GameErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { hasError: false }; }
+            static getDerivedStateFromError() { return { hasError: true }; }
+            render() {
+                if (this.state.hasError) {
+                    return React.createElement('div', { className: "h-full flex flex-col items-center justify-center p-6 bg-background" },
+                        React.createElement('div', { className: "bg-white p-8 rounded-3xl shadow-card max-w-sm text-center" },
+                            React.createElement('h2', { className: "text-2xl font-bold text-primary mb-3" }, "Algo salió mal"),
+                            React.createElement('button', { onClick: () => { this.setState({ hasError: false }); this.props.onReset(); }, className: "w-full bg-primary text-white px-6 py-4 rounded-2xl font-extrabold text-lg btn-press" }, "Volver al menú")
+                        )
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        const ALL_ITEMS = [
+            { id: 'spoon', name: 'Cuchara', icon: Spoon, color: 'text-slate-600' }, { id: 'bed', name: 'Cama', icon: Bed, color: 'text-blue-600' },
+            { id: 'dog', name: 'Perro', icon: PawPrint, color: 'text-amber-700' }, { id: 'cat', name: 'Gato', icon: Cat, color: 'text-gray-600' },
+            { id: 'keys', name: 'Llaves', icon: Key, color: 'text-yellow-600' }, { id: 'shoes', name: 'Zapatos', icon: Footprints, color: 'text-orange-700' },
+            { id: 'clock', name: 'Reloj', icon: Clock, color: 'text-indigo-600' }, { id: 'bread', name: 'Sándwich', icon: Sandwich, color: 'text-orange-600' },
+            { id: 'chair', name: 'Sillón', icon: Armchair, color: 'text-purple-600' }, { id: 'glass', name: 'Agua', icon: GlassWater, color: 'text-cyan-600' },
+            { id: 'glasses', name: 'Gafas', icon: Glasses, color: 'text-slate-800' }, { id: 'soap', name: 'Jabón', icon: Droplets, color: 'text-teal-600' },
+            { id: 'apple', name: 'Manzana', icon: Apple, color: 'text-red-600' }, { id: 'sun', name: 'Sol', icon: Sun, color: 'text-yellow-500' },
+            { id: 'flower', name: 'Flor', icon: Flower, color: 'text-pink-500' }, { id: 'car', name: 'Coche', icon: Car, color: 'text-blue-600' },
+            { id: 'phone', name: 'Teléfono', icon: Phone, color: 'text-emerald-700' }, { id: 'pizza', name: 'Pizza', icon: Pizza, color: 'text-orange-600' },
+            { id: 'icecream', name: 'Helado', icon: IceCream, color: 'text-pink-400' }, { id: 'bus', name: 'Autobús', icon: Bus, color: 'text-blue-700' },
+            { id: 'train', name: 'Tren', icon: Train, color: 'text-slate-700' }, { id: 'shirt', name: 'Camisa', icon: Shirt, color: 'text-indigo-500' },
+            { id: 'pencil', name: 'Lápiz', icon: Pencil, color: 'text-yellow-700' }, { id: 'hammer', name: 'Martillo', icon: Hammer, color: 'text-gray-600' },
+            { id: 'fish', name: 'Pez', icon: Fish, color: 'text-blue-400' }, { id: 'tv', name: 'Televisión', icon: Tv, color: 'text-slate-800' },
+            { id: 'watch', name: 'Reloj', icon: Watch, color: 'text-amber-600' }, { id: 'truck', name: 'Camión', icon: Truck, color: 'text-red-700' },
+            { id: 'ship', name: 'Barco', icon: Ship, color: 'text-cyan-700' }, { id: 'sofa', name: 'Sofá', icon: Sofa, color: 'text-purple-700' },
+            { id: 'banana', name: 'Plátano', icon: Banana, color: 'text-yellow-500' }, { id: 'carrot', name: 'Zanahoria', icon: Carrot, color: 'text-orange-500' },
+            { id: 'rain', name: 'Lluvia', icon: CloudRain, color: 'text-blue-700' }, { id: 'snow', name: 'Nieve', icon: CloudSnow, color: 'text-cyan-300' },
+            { id: 'wind', name: 'Viento', icon: Wind, color: 'text-slate-400' }, { id: 'tent', name: 'Tienda', icon: Tent, color: 'text-green-800' },
+            { id: 'building', name: 'Edificio', icon: Building, color: 'text-gray-600' }, { id: 'factory', name: 'Fábrica', icon: Factory, color: 'text-slate-700' },
+            { id: 'castle', name: 'Castillo', icon: Castle, color: 'text-amber-600' }, { id: 'church', name: 'Iglesia', icon: Church, color: 'text-yellow-700' },
+            { id: 'hotel', name: 'Hotel', icon: Hotel, color: 'text-blue-500' }, { id: 'school', name: 'Escuela', icon: School, color: 'text-red-500' },
+            { id: 'hospital', name: 'Hospital', icon: Activity, color: 'text-red-600' }, { id: 'store', name: 'Tienda', icon: Store, color: 'text-green-600' },
+            { id: 'lightbulb', name: 'Bombilla', icon: Lightbulb, color: 'text-yellow-500' }, { id: 'fan', name: 'Ventilador', icon: Fan, color: 'text-blue-400' },
+            { id: 'plug', name: 'Enchufe', icon: Plug, color: 'text-gray-800' }, { id: 'battery', name: 'Pila', icon: Battery, color: 'text-green-600' },
+            { id: 'notebook', name: 'Cuaderno', icon: Notebook, color: 'text-blue-800' }, { id: 'folder', name: 'Carpeta', icon: Folder, color: 'text-yellow-600' },
+            { id: 'trash', name: 'Basura', icon: Trash2, color: 'text-gray-600' }, { id: 'bag', name: 'Bolsa', icon: ShoppingBag, color: 'text-red-500' },
+            { id: 'wallet', name: 'Cartera', icon: Wallet, color: 'text-amber-900' }, { id: 'coins', name: 'Monedas', icon: Coins, color: 'text-yellow-500' },
+            { id: 'calculator', name: 'Calculadora', icon: Calculator, color: 'text-gray-700' }, { id: 'alarm', name: 'Despertador', icon: AlarmClock, color: 'text-red-600' },
+            { id: 'globe', name: 'Globo', icon: Globe, color: 'text-blue-600' }, { id: 'laptop', name: 'Portátil', icon: Laptop, color: 'text-slate-700' },
+            { id: 'camera', name: 'Cámara', icon: Camera, color: 'text-gray-700' }, { id: 'headphones', name: 'Cascos', icon: Headphones, color: 'text-blue-500' },
+            { id: 'citrus', name: 'Limón', icon: Citrus, color: 'text-yellow-400' }, { id: 'soup', name: 'Sopa', icon: Soup, color: 'text-orange-800' }
+        ];
+
+        const ALL_SENTENCES = [
+            { text: "Tomo la sopa con la...", answerId: "spoon" }, { text: "Por la noche duermo en la...", answerId: "bed" },
+            { text: "El mejor amigo del hombre es el...", answerId: "dog" }, { text: "El animal que dice miau es el...", answerId: "cat" },
+            { text: "Abro la puerta con las...", answerId: "keys" }, { text: "Antes de salir me pongo los...", answerId: "shoes" },
+            { text: "Para saber la hora miro el...", answerId: "clock" }, { text: "El bocadillo se hace con...", answerId: "bread" },
+            { text: "Cuando estoy cansado me siento en el...", answerId: "chair" }, { text: "Bebo agua en un vaso de...", answerId: "glass" },
+            { text: "Para leer bien me pongo las...", answerId: "glasses" }, { text: "Me lavo las manos con agua y...", answerId: "soap" },
+            { text: "Una fruta roja y rica es la...", answerId: "apple" }, { text: "Los monos comen...", answerId: "banana" },
+            { text: "De postre me gusta comer...", answerId: "icecream" }, { text: "Para ir al centro cojo el...", answerId: "bus" },
+            { text: "Escribo una carta con el...", answerId: "pencil" }, { text: "Veo las noticias en la...", answerId: "tv" },
+            { text: "El animal que nada en el mar es el...", answerId: "fish" }, { text: "Clavo un clavo con el...", answerId: "hammer" },
+            { text: "Me abrocho los botones de la...", answerId: "shirt" }, { text: "El transporte que va por vías es el...", answerId: "train" },
+            { text: "Ceno un trozo de...", answerId: "pizza" }, { text: "Me tumbo a descansar en el...", answerId: "sofa" }
+        ];
+
+        function App() {
+            const [gameState, setGameState] = useState('loading'); 
+            const [soundEnabled, setSoundEnabled] = useState(true); 
+            const [isFullscreen, setIsFullscreen] = useState(false);
+            const [todayName, setTodayName] = useState('');
+            const [levelSelectMode, setLevelSelectMode] = useState('memory');
+            const [helpModal, setHelpModal] = useState(null);
+            const [isTraining, setIsTraining] = useState(false);
+            const [trainingQueue, setTrainingQueue] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [currentUserId, setCurrentUserId] = useState(null);
+            const [tempName, setTempName] = useState('');
+            const [tempPhoto, setTempPhoto] = useState(null);
+            const [userToDelete, setUserToDelete] = useState(null);
+            
+            // --- ESTADO PARA DONACIÓN ---
+            const [showDonationModal, setShowDonationModal] = useState(false);
+
+            const fileInputRef = useRef(null), userPhotoRef = useRef(null);
+            const soundEnabledRef = useRef(soundEnabled), recallTimerRef = useRef(null);
+            const askedQuestionsRef = useRef([]), noPhotosWarnedRef = useRef(false);
+
+            const [currentLevel, setCurrentLevel] = useState(1);
+            const [cards, setCards] = useState([]), [flippedIndices, setFlippedIndices] = useState([]), [matchedPairs, setMatchedPairs] = useState([]);
+            const [quizRound, setQuizRound] = useState(0), [quizQuestion, setQuizQuestion] = useState(null), [quizFeedback, setQuizFeedback] = useState(null);
+            const [puzzleTarget, setPuzzleTarget] = useState(null), [puzzlePieces, setPuzzlePieces] = useState([]), [puzzleSelected, setPuzzleSelected] = useState(null);
+            const [musicSequence, setMusicSequence] = useState([]), [userMusicSequence, setUserMusicSequence] = useState([]), [isShowingMusic, setIsShowingMusic] = useState(false), [activeNote, setActiveNote] = useState(null);
+            const [recallPhase, setRecallPhase] = useState('memorize'), [recallMode, setRecallMode] = useState('image'), [timeLeft, setTimeLeft] = useState(5);
+            const [wordSearchGrid, setWordSearchGrid] = useState([]), [wordSearchWords, setWordSearchWords] = useState([]), [wordSearchSelection, setWordSearchSelection] = useState([]), [wordSearchFoundCells, setWordSearchFoundCells] = useState([]);
+
+            useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
+
+            useEffect(() => {
+                const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                const update = () => setTodayName(days[new Date().getDay()]);
+                update();
+                const onVis = () => { if (!document.hidden) update(); };
+                document.addEventListener('visibilitychange', onVis);
+                return () => document.removeEventListener('visibilitychange', onVis);
+            }, []);
+
+            useEffect(() => {
+                const loader = document.getElementById('loading');
+                if (loader) loader.style.opacity = '0';
+                setTimeout(() => { if (loader) loader.remove(); }, 500);
+                
+                loadVoices();
+                let savedUsers = [];
+                try { savedUsers = JSON.parse(safeGetItem('estimula_users') || '[]'); } catch (e) {}
+                
+                const oldName = safeGetItem('estimulaUserName');
+                if (oldName && savedUsers.length === 0) {
+                    const oldLevel = parseInt(safeGetItem('estimulaNivelMax') || '1', 10);
+                    savedUsers = [{ id: 'user_' + Date.now(), name: oldName, photo: safeGetItem('estimulaUserPhoto'), levels: { memory: oldLevel, quiz: oldLevel, sentences: oldLevel, differences: oldLevel, puzzle: oldLevel, music: oldLevel, recall_word: oldLevel, recall_image: oldLevel, wordsearch: oldLevel }, history: [], customPhotos: [], imagePreference: 'both', totalGames: 0 }];
+                    safeSetItem('estimula_users', JSON.stringify(savedUsers));
+                    safeRemoveItem('estimulaUserName');
+                } else {
+                    savedUsers = savedUsers.map(u => {
+                        if (u.level !== undefined && !u.levels) { const lvl = u.level; const newU = { ...u, levels: { memory: lvl, quiz: lvl, sentences: lvl, differences: lvl, puzzle: lvl, music: lvl, recall_word: lvl, recall_image: lvl, wordsearch: lvl } }; delete newU.level; return newU; }
+                        if (u.levels && u.levels.wordsearch === undefined) u.levels.wordsearch = 1;
+                        if (u.totalGames === undefined) u.totalGames = (u.history || []).length;
+                        return u;
+                    });
+                    safeSetItem('estimula_users', JSON.stringify(savedUsers));
+                }
+                setUsers(savedUsers);
+                setGameState(savedUsers.length === 0 ? 'new_profile' : 'select_profile');
+            }, []);
+
+            // --- EFECTO PARA MOSTRAR DONACIÓN AL ENTRAR AL MENÚ ---
+            useEffect(() => {
+                if (gameState === 'menu') {
+                    // Solo se muestra una vez por sesión
+                    if (!sessionStorage.getItem('donationShown')) {
+                        setTimeout(() => {
+                            setShowDonationModal(true);
+                            sessionStorage.setItem('donationShown', 'true');
+                        }, 1500);
+                    }
+                }
+            }, [gameState]);
+
+            const activeUser = users.find(u => u.id === currentUserId) || {};
+            const userName = activeUser.name || '', userPhoto = activeUser.photo || null;
+            const history = activeUser.history || [], customPhotos = activeUser.customPhotos || [];
+            const streak = calculateStreak(history);
+            const getUnlockedLevel = (mode) => activeUser.levels?.[mode] || 1;
+
+            const toggleFullscreen = () => {
+                if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(() => {}); setIsFullscreen(true); }
+                else { if (document.exitFullscreen) { document.exitFullscreen(); setIsFullscreen(false); } }
+            };
+
+            const handleUserPhotoUpload = async (e) => {
+                const file = e.target.files[0]; if (!file) return;
+                try { setTempPhoto(await fileToDataURL(file, 400, 0.85)); } catch (err) { alert('Error al procesar la imagen.'); }
+            };
+
+            const handleCreateProfile = () => {
+                if (!tempName.trim()) return;
+                unlockAudio(); 
+                const newUser = { id: 'user_' + Date.now(), name: tempName, photo: tempPhoto, levels: { memory: 1, quiz: 1, sentences: 1, differences: 1, puzzle: 1, music: 1, recall_word: 1, recall_image: 1, wordsearch: 1 }, history: [], customPhotos: [], imagePreference: 'both', totalGames: 0 };
+                const updatedUsers = [...users, newUser];
+                safeSetItem('estimula_users', JSON.stringify(updatedUsers));
+                setUsers(updatedUsers); setCurrentUserId(newUser.id); safeSetItem('estimula_active_user_id', newUser.id);
+                setTempName(''); setTempPhoto(null); setGameState('menu');
+                if (soundEnabled) setTimeout(() => speakText(`Hola ${newUser.name}, feliz ${todayName}.`), 800);
+            };
+
+            const handlePhotoUpload = async (e) => {
+                const files = Array.from(e.target.files); if (files.length === 0) return;
+                try {
+                    const newPhotos = await Promise.all(files.map(async (file) => ({ id: `custom-${Date.now()}-${Math.random()}`, url: await fileToDataURL(file, 800, 0.8), name: '', isCustom: true })));
+                    const updatedUsers = users.map(u => u.id === currentUserId ? { ...u, customPhotos: [...(u.customPhotos || []), ...newPhotos] } : u);
+                    safeSetItem('estimula_users', JSON.stringify(updatedUsers)); setUsers(updatedUsers);
+                } catch (err) { alert('Error al procesar las fotos.'); }
+            };
+
+            const updatePhotoName = (id, name) => {
+                const updatedUsers = users.map(u => u.id === currentUserId ? { ...u, customPhotos: (u.customPhotos || []).map(p => p.id === id ? { ...p, name } : p) } : u);
+                safeSetItem('estimula_users', JSON.stringify(updatedUsers)); setUsers(updatedUsers);
+            };
+
+            const removePhoto = (id) => {
+                const updatedUsers = users.map(u => u.id === currentUserId ? { ...u, customPhotos: (u.customPhotos || []).filter(p => p.id !== id) } : u);
+                safeSetItem('estimula_users', JSON.stringify(updatedUsers)); setUsers(updatedUsers);
+            };
+
+            const updateActiveUser = (updates) => {
+                const updatedUsers = users.map(u => u.id === currentUserId ? { ...u, ...updates } : u);
+                safeSetItem('estimula_users', JSON.stringify(updatedUsers)); setUsers(updatedUsers);
+            };
+
+            const handleGoHome = () => {
+                if (recallTimerRef.current) clearInterval(recallTimerRef.current);
+                setIsTraining(false); setTrainingQueue([]); setGameState('menu');
+            };
+
+            const winGame = (modeKey, gameName, playedLevel) => {
+                if (soundEnabledRef.current) playSound('win');
+                const user = users.find(u => u.id === currentUserId); if (!user) return;
+                const currentUnlocked = user.levels?.[modeKey] || 1;
+                let newLevels = { ...(user.levels || {}) };
+                if (playedLevel === currentUnlocked && currentUnlocked < 50) newLevels[modeKey] = currentUnlocked + 1;
+                const newHistory = [{ id: Date.now(), date: new Date().toISOString(), game: gameName, details: `Nivel ${playedLevel}` }, ...(user.history || [])].slice(0, 200);
+                const updatedUsers = users.map(u => u.id === currentUserId ? { ...u, levels: newLevels, history: newHistory, totalGames: (u.totalGames || 0) + 1 } : u);
+                safeSetItem('estimula_users', JSON.stringify(updatedUsers)); setUsers(updatedUsers);
+                setGameState('won');
+            };
+
+            const startDailyChallenge = () => {
+                setIsTraining(true);
+                const seq = ['memory', 'quiz', 'sentences', 'differences', 'music', 'recall_word', 'recall_image', 'puzzle', 'wordsearch'];
+                setTrainingQueue(seq.slice(1)); setLevelSelectMode(seq[0]); launchSelectedGame(getUnlockedLevel(seq[0]), seq[0]);
+            };
+
+            const getGamePool = (level) => {
+                const pref = activeUser.imagePreference || 'both';
+                const maxItems = Math.min(ALL_ITEMS.length, 16 + (level * 4));
+                const defaults = ALL_ITEMS.slice(0, maxItems);
+                if (pref === 'default') return [...defaults];
+                if (pref === 'custom') {
+                    if (customPhotos.length > 0) return [...customPhotos];
+                    if (!noPhotosWarnedRef.current) { noPhotosWarnedRef.current = true; setTimeout(() => alert('Aún no has añadido fotos propias.'), 150); }
+                    return [...defaults];
+                }
+                return [...customPhotos, ...defaults];
+            };
+
+            const generateWordSearch = (level = currentLevel) => {
+                let gridSize = level > 25 ? 10 : level > 15 ? 9 : level > 8 ? 8 : level > 3 ? 7 : 6;
+                let numWords = level > 25 ? 6 : level > 15 ? 5 : level > 8 ? 4 : level > 3 ? 3 : 2;
+                const validItems = ALL_ITEMS.filter(i => i.name && !i.name.includes(' ') && i.name.length <= gridSize);
+                const selectedWords = [...validItems].sort(() => Math.random() - 0.5).slice(0, numWords).map(i => ({ original: i.name, text: i.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase(), found: false }));
+                let grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill('')), placedWords = [];
+                selectedWords.forEach(w => {
+                    let placed = false, att = 0;
+                    while (!placed && att < 100) {
+                        att++; const hor = Math.random() > 0.5, r = Math.floor(Math.random() * gridSize), c = Math.floor(Math.random() * gridSize);
+                        let can = true;
+                        if (hor) { if (c + w.text.length > gridSize) can = false; else for (let i = 0; i < w.text.length; i++) if (grid[r][c+i] !== '' && grid[r][c+i] !== w.text[i]) can = false; }
+                        else { if (r + w.text.length > gridSize) can = false; else for (let i = 0; i < w.text.length; i++) if (grid[r+i][c] !== '' && grid[r+i][c] !== w.text[i]) can = false; }
+                        if (can) { if (hor) for (let i = 0; i < w.text.length; i++) grid[r][c+i] = w.text[i]; else for (let i = 0; i < w.text.length; i++) grid[r+i][c] = w.text[i]; placedWords.push(w); placed = true; }
+                    }
+                });
+                const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+                for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) if (grid[r][c] === '') grid[r][c] = letters.charAt(Math.floor(Math.random() * letters.length));
+                setWordSearchGrid(grid); setWordSearchWords(placedWords); setWordSearchFoundCells([]); setWordSearchSelection([]);
+                if (soundEnabledRef.current) speakText("Encuentra las palabras marcando letra a letra.");
+            };
+
+            const handleWordSearchClick = (r, c) => {
+                const idx = wordSearchSelection.findIndex(s => s[0] === r && s[1] === c);
+                let newSel = [...wordSearchSelection];
+                if (idx !== -1) { newSel.splice(idx, 1); if (soundEnabledRef.current) playSound('flip'); setWordSearchSelection(newSel); return; }
+                newSel.push([r, c]); if (soundEnabledRef.current) playSound('flip'); setWordSearchSelection(newSel);
+                if (newSel.length > 1) {
+                    let fw = newSel.map(p => wordSearchGrid[p[0]][p[1]]).join(''), rw = fw.split('').reverse().join('');
+                    let mIdx = wordSearchWords.findIndex(w => !w.found && (w.text === fw || w.text === rw));
+                    if (mIdx !== -1) {
+                        if (soundEnabledRef.current) playSound('correct');
+                        const nw = [...wordSearchWords]; nw[mIdx].found = true; setWordSearchWords(nw);
+                        setWordSearchFoundCells(prev => { const n = [...prev]; newSel.forEach(cell => { const s = `${cell[0]},${cell[1]}`; if (!n.includes(s)) n.push(s); }); return n; });
+                        setWordSearchSelection([]);
+                        if (nw.every(w => w.found)) setTimeout(() => winGame('wordsearch', 'Sopa de Letras', currentLevel), 1000);
+                        return;
+                    }
+                    const maxL = Math.max(...wordSearchWords.filter(w => !w.found).map(w => w.text.length), 0);
+                    if (newSel.length > maxL && maxL > 0) setTimeout(() => setWordSearchSelection([]), 400);
+                }
+            };
+
+            const generateRecallQuestion = (level = currentLevel) => {
+                setQuizFeedback(null); setRecallPhase('memorize');
+                const time = Math.max(2, 5 - Math.floor((level - 1) / 15)); setTimeLeft(time);
+                let pool = getGamePool(level).filter(i => i.name && i.name.trim() !== '');
+                const totalOpt = Math.min(6, 3 + Math.floor((level - 1) / 10));
+                if (pool.length < totalOpt) pool = [...pool, ...ALL_ITEMS.slice(0, 16 + level * 4).filter(d => !pool.find(p => p.id === d.id))];
+                if (pool.length < 3) { setGameState('menu'); return; }
+                let av = pool.filter(i => !askedQuestionsRef.current.includes(i.id)); if (av.length === 0) { av = pool; askedQuestionsRef.current = []; }
+                const target = av[Math.floor(Math.random() * av.length)]; askedQuestionsRef.current.push(target.id);
+                let dist = pool.filter(i => i.id !== target.id).sort(() => Math.random() - 0.5).slice(0, totalOpt - 1);
+                setQuizQuestion({ target, options: [target, ...dist].sort(() => Math.random() - 0.5) });
+                if (soundEnabledRef.current) speakText("Fíjate bien en el dibujo.");
+                if (recallTimerRef.current) clearInterval(recallTimerRef.current);
+                let c = time; recallTimerRef.current = setInterval(() => { c--; setTimeLeft(c); if (c <= 0) { clearInterval(recallTimerRef.current); setRecallPhase('answer'); if (soundEnabledRef.current) speakText("¿Cuál era?"); } }, 1000);
+            };
+
+            const startMemoryGame = (level) => {
+                const cCount = level <= 5 ? 4 : level <= 15 ? 6 : level <= 30 ? 8 : 12, pNeed = cCount / 2;
+                let pool = getGamePool(level), sel = [...pool].sort(() => Math.random() - 0.5).slice(0, pNeed);
+                if (sel.length < pNeed) sel = [...sel, ...ALL_ITEMS.slice(0, 16 + level * 4).filter(d => !sel.find(s => s.id === d.id)).sort(() => Math.random() - 0.5).slice(0, pNeed - sel.length)];
+                let deck = []; sel.forEach((item, i) => {
+                    if (item.isCustom && item.name && item.name.trim() !== '') { deck.push({ ...item, uniqueId: `c-${i}-i`, displayType: 'image' }, { ...item, uniqueId: `c-${i}-t`, displayType: 'text', text: item.name }); }
+                    else { deck.push({ ...item, uniqueId: `c-${i}-1`, displayType: item.isCustom ? 'image' : 'icon' }, { ...item, uniqueId: `c-${i}-2`, displayType: item.isCustom ? 'image' : 'icon' }); }
+                });
+                setCards(deck.sort(() => Math.random() - 0.5)); setFlippedIndices([]); setMatchedPairs([]); setCurrentLevel(level); setGameState('playing_memory');
+            };
+
+            const generateQuizQuestion = (level = currentLevel) => {
+                setQuizFeedback(null); let pool = getGamePool(level).filter(i => i.name && i.name.trim() !== '');
+                const totalOpt = Math.min(6, 3 + Math.floor((level - 1) / 10));
+                if (pool.length < totalOpt) pool = [...pool, ...ALL_ITEMS.slice(0, 16 + level * 4).filter(d => !pool.find(p => p.id === d.id))];
+                if (pool.length < 3) { setGameState('menu'); return; }
+                let av = pool.filter(i => !askedQuestionsRef.current.includes(i.id)); if (av.length === 0) { av = pool; askedQuestionsRef.current = []; }
+                const target = av[Math.floor(Math.random() * av.length)]; askedQuestionsRef.current.push(target.id);
+                let dist = pool.filter(i => i.id !== target.id).sort(() => Math.random() - 0.5).slice(0, totalOpt - 1);
+                setQuizQuestion({ target, options: [target, ...dist].sort(() => Math.random() - 0.5), type: 'who_is' });
+                if (soundEnabledRef.current && gameState === 'playing_quiz') setTimeout(() => speakText("¿Cuál es " + target.name + "?"), 500);
+            };
+
+            const generateSentenceQuestion = (level = currentLevel) => {
+                setQuizFeedback(null);
+                const maxI = Math.min(ALL_SENTENCES.length, 10 + Math.floor(level / 2)), avS = ALL_SENTENCES.slice(0, maxI);
+                let unS = avS.filter(s => !askedQuestionsRef.current.includes(s.answerId)); if (unS.length === 0) { unS = avS; askedQuestionsRef.current = []; }
+                const sObj = unS[Math.floor(Math.random() * unS.length)]; askedQuestionsRef.current.push(sObj.answerId);
+                const totalOpt = Math.min(6, 3 + Math.floor((level - 1) / 10)); let pool = getGamePool(level);
+                let target = pool.find(p => p.id === sObj.answerId);
+                if (!target) { pool = ALL_ITEMS.slice(0, 16 + level * 4); target = pool.find(p => p.id === sObj.answerId) || pool[0]; }
+                if (pool.length < totalOpt) pool = [...pool, ...ALL_ITEMS.filter(a => !pool.find(p => p.id === a.id))];
+                let dist = pool.filter(p => p.id !== target.id).sort(() => Math.random() - 0.5).slice(0, totalOpt - 1);
+                setQuizQuestion({ target, options: [target, ...dist].sort(() => Math.random() - 0.5), text: sObj.text, type: 'sentence' });
+                if (soundEnabledRef.current) setTimeout(() => speakText(sObj.text), 500);
+            };
+
+            const generateDifferenceQuestion = (level = currentLevel) => {
+                setQuizFeedback(null); let pool = getGamePool(level); if (pool.length < 2) pool = [...pool, ...ALL_ITEMS.slice(0, 16 + level * 4)];
+                let un = pool.filter(i => !askedQuestionsRef.current.includes(i.id)); if (un.length === 0) { un = pool; askedQuestionsRef.current = []; }
+                let dItem = un[Math.floor(Math.random() * un.length)]; askedQuestionsRef.current.push(dItem.id);
+                let cItem; do { cItem = pool[Math.floor(Math.random() * pool.length)]; } while (dItem.id === cItem.id);
+                const totalOpt = Math.min(6, 3 + Math.floor((level - 1) / 10));
+                let opts = Array(totalOpt - 1).fill(cItem).concat([dItem]).map((item, i) => ({ ...item, uniqueKey: `${item.id}-${i}`, isTarget: item.id === dItem.id })).sort(() => Math.random() - 0.5);
+                setQuizQuestion({ options: opts, type: 'difference', text: "¿Cuál es diferente?" });
+                if (soundEnabledRef.current) setTimeout(() => speakText("¿Cuál es diferente?"), 500);
+            };
+
+            const generatePuzzle = (level = currentLevel) => {
+                let pool = getGamePool(level); if (pool.length === 0) pool = ALL_ITEMS;
+                setPuzzleTarget(pool[Math.floor(Math.random() * pool.length)]);
+                let p = [0, 1, 2, 3]; do { p = p.sort(() => Math.random() - 0.5); } while (p[0]===0 && p[1]===1 && p[2]===2 && p[3]===3);
+                setPuzzlePieces(p); setPuzzleSelected(null); setQuizFeedback(null);
+                if (soundEnabledRef.current) setTimeout(() => speakText("Arma el puzzle"), 500);
+            };
+
+            const playSequence = async (seq, level) => {
+                setIsShowingMusic(true); setUserMusicSequence([]); await new Promise(r => setTimeout(r, 600));
+                const dur = Math.max(200, 500 - (level * 10)), pause = Math.max(50, 200 - (level * 4));
+                for (let i = 0; i < seq.length; i++) {
+                    setActiveNote(seq[i]); if (soundEnabledRef.current) playGameNote(seq[i], dur / 1000);
+                    await new Promise(r => setTimeout(r, dur)); setActiveNote(null); await new Promise(r => setTimeout(r, pause));
+                }
+                setIsShowingMusic(false);
+            };
+
+            const generateNextMusicSequence = (seq, level) => {
+                const n = Math.floor(Math.random() * 4);
+                const nSeq = seq.length >= 7 ? [...seq.slice(1), n] : [...seq, n];
+                setMusicSequence(nSeq); playSequence(nSeq, level);
+            };
+
+            const startGame = (mode, level) => {
+                setCurrentLevel(level); setQuizRound(1); askedQuestionsRef.current = [];
+                if (mode === 'memory') startMemoryGame(level);
+                else if (mode === 'quiz') { setGameState('playing_quiz'); generateQuizQuestion(level); }
+                else if (mode === 'sentences') { setGameState('playing_sentences'); generateSentenceQuestion(level); }
+                else if (mode === 'differences') { setGameState('playing_differences'); generateDifferenceQuestion(level); }
+                else if (mode === 'puzzle') { setGameState('playing_puzzle'); generatePuzzle(level); }
+                else if (mode === 'music') { setGameState('playing_music'); setMusicSequence([]); setUserMusicSequence([]); setTimeout(() => generateNextMusicSequence([], level), 2000); }
+                else if (mode === 'recall_word') { setRecallMode('word'); setGameState('playing_recall'); generateRecallQuestion(level); }
+                else if (mode === 'recall_image') { setRecallMode('image'); setGameState('playing_recall'); generateRecallQuestion(level); }
+                else if (mode === 'wordsearch') { setGameState('playing_wordsearch'); generateWordSearch(level); }
+            };
+
+            const GAMES_LIST = [
+                { id: 'memory', title: 'Memoria', icon: Grid, color: 'text-green-600', bg: 'bg-green-100' }, { id: 'quiz', title: '¿Quién es?', icon: HelpCircle, color: 'text-blue-600', bg: 'bg-blue-100' },
+                { id: 'sentences', title: 'Frases', icon: MessageSquare, color: 'text-purple-600', bg: 'bg-purple-100' }, { id: 'differences', title: 'Diferente', icon: ScanEye, color: 'text-orange-600', bg: 'bg-orange-100' },
+                { id: 'music', title: 'Música', icon: Music, color: 'text-teal-600', bg: 'bg-teal-100' }, { id: 'wordsearch', title: 'Letras', icon: Type, color: 'text-indigo-600', bg: 'bg-indigo-100' },
+                { id: 'puzzle', title: 'Puzzle', icon: Puzzle, color: 'text-rose-600', bg: 'bg-rose-100' }, { id: 'recall_word', title: 'Fugaz', subtitle: '(Palabras)', icon: BookOpen, color: 'text-amber-600', bg: 'bg-amber-100' },
+                { id: 'recall_image', title: 'Fugaz', subtitle: '(Dibujos)', icon: Timer, color: 'text-cyan-600', bg: 'bg-cyan-100' }
+            ];
+
+            const renderCardContent = (card) => {
+                if (card.displayType === 'text') return React.createElement('div', { className: "text-center p-1 flex items-center justify-center w-full h-full" }, React.createElement('span', { className: "text-[12px] sm:text-base font-bold text-primary leading-tight break-words px-1" }, card.text));
+                if (card.isCustom) return React.createElement('img', { src: card.url, className: "w-full h-full object-cover rounded-lg", alt: "memory" });
+                return React.createElement(card.icon, { className: `w-8 h-8 sm:w-12 sm:h-12 ${card.color}`, strokeWidth: 2 });
+            };
+
+            const getGridClass = (len) => len <= 2 ? "grid-cols-2 h-[25vh]" : len === 3 ? "grid-cols-3 h-[30vh]" : len === 4 ? "grid-cols-2 h-[40vh]" : "grid-cols-2 sm:grid-cols-3 h-[45vh]";
+
+            const content = gameState.startsWith('playing_') ? React.createElement(GameErrorBoundary, { onReset: handleGoHome }, renderView()) : renderView();
+            
+            // --- MODAL DE DONACIÓN ---
+            const DonationModal = () => {
+                if (!showDonationModal) return null;
+                return React.createElement('div', { className: "fixed inset-0 bg-black/60 z-[250] flex items-center justify-center p-4 fade-in" },
+                    React.createElement('div', { className: "bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full text-center" },
+                        React.createElement('div', { className: "w-20 h-20 bg-[#FF5E5B]/10 rounded-full flex items-center justify-center mx-auto mb-4" },
+                            React.createElement(Coffee, { className: "w-10 h-10 text-[#FF5E5B]" })
+                        ),
+                        React.createElement('h3', { className: "text-2xl font-black text-primary mb-3" }, "¿Te gusta Estimula+?"),
+                        React.createElement('p', { className: "text-primary/70 mb-6 text-lg leading-relaxed" }, 
+                            "Este proyecto es gratuito y sin anuncios. Si quieres apoyar al creador para que siga mejorándolo, puedes invitarme a un café. ¡Gracias! ☕"
+                        ),
+                        React.createElement('div', { className: "flex flex-col gap-3" },
+                            React.createElement('a', { 
+                                href: "https://ko-fi.com/bytespc", target: "_blank", rel: "noopener noreferrer",
+                                className: "w-full bg-[#FF5E5B] text-white font-extrabold py-4 rounded-2xl btn-press shadow-sm flex items-center justify-center gap-2 text-lg" 
+                            }, React.createElement(Coffee, { className: "w-5 h-5" }), "Invitar a un café"),
+                            React.createElement('button', { 
+                                onClick: () => setShowDonationModal(false), 
+                                className: "w-full bg-surface text-primary/70 font-bold py-4 rounded-2xl btn-press hover:bg-surface/80 text-lg" 
+                            }, "Seguir jugando")
+                        )
+                    )
+                );
+            };
+
+            return React.createElement(React.Fragment, null, content, renderHelpModal(), React.createElement(DonationModal));
+
+            function renderView() {
+                if (gameState === 'loading') return null;
+                
+                if (gameState === 'select_profile') return React.createElement('div', { className: "h-full w-full flex flex-col items-center justify-center p-6 fade-in bg-background relative overflow-y-auto" },
+                    React.createElement('div', { className: "w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-soft border-2 border-accent/30 mb-5" }, React.createElement(Users, { className: "w-10 h-10 text-accentDark" })),
+                    React.createElement('h1', { className: "text-3xl font-black text-primary mb-2" }, "¿Quién va a jugar?"),
+                    React.createElement('p', { className: "text-primary/50 font-semibold mb-8" }, "Toca tu foto para empezar"),
+                    React.createElement('div', { className: "grid grid-cols-2 gap-4 w-full max-w-sm mb-8" },
+                        users.map(user => React.createElement('div', { key: user.id, className: "relative w-full" },
+                            React.createElement('button', { onClick: () => { unlockAudio(); setCurrentUserId(user.id); safeSetItem('estimula_active_user_id', user.id); setGameState('menu'); if (soundEnabled) setTimeout(() => speakText(`Hola ${user.name}, feliz ${todayName}.`), 800); }, className: "bg-white p-5 rounded-3xl shadow-card border-2 border-transparent flex flex-col items-center gap-3 btn-press w-full h-full" },
+                                user.photo ? React.createElement('img', { src: user.photo, className: "w-20 h-20 rounded-full object-cover shadow-soft border-2 border-accent/30" }) : React.createElement('div', { className: "w-20 h-20 rounded-full bg-accent flex items-center justify-center text-white font-black text-3xl shadow-warm" }, user.name.charAt(0).toUpperCase()),
+                                React.createElement('span', { className: "font-extrabold text-primary truncate w-full text-center" }, user.name)
+                            ),
+                            React.createElement('button', { onClick: (e) => { e.stopPropagation(); setUserToDelete(user); }, className: "absolute -top-2 -right-2 p-2 bg-red-100 text-red-400 rounded-full shadow-sm btn-press" }, React.createElement(Trash2, { className: "w-4 h-4" }))
+                        ))
+                    ),
+                    React.createElement('button', { onClick: () => { unlockAudio(); setTempName(''); setTempPhoto(null); setGameState('new_profile'); }, className: "bg-primary text-white px-8 py-4 rounded-2xl font-extrabold shadow-soft flex items-center gap-3 btn-press text-lg" }, React.createElement(UserPlus, { className: "w-6 h-6" }), "Nuevo Usuario"),
+                    userToDelete && React.createElement('div', { className: "fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 fade-in" },
+                        React.createElement('div', { className: "bg-white rounded-3xl p-8 shadow-2xl max-w-sm w-full text-center" },
+                            React.createElement('h3', { className: "text-2xl font-black text-primary mb-2" }, "¿Borrar perfil?"),
+                            React.createElement('p', { className: "text-primary/60 mb-6" }, `Se eliminará a ${userToDelete.name}.`),
+                            React.createElement('div', { className: "flex gap-3" },
+                                React.createElement('button', { onClick: () => setUserToDelete(null), className: "flex-1 bg-surface text-primary/60 font-bold py-4 rounded-2xl btn-press" }, "Cancelar"),
+                                React.createElement('button', { onClick: () => { const u = users.filter(x => x.id !== userToDelete.id); safeSetItem('estimula_users', JSON.stringify(u)); setUsers(u); if (currentUserId === userToDelete.id) setCurrentUserId(null); setUserToDelete(null); if (u.length === 0) setGameState('new_profile'); }, className: "flex-1 bg-red-500 text-white font-bold py-4 rounded-2xl btn-press" }, "Sí, borrar")
+                            )
+                        )
+                    )
+                );
+
+                if (gameState === 'new_profile') return React.createElement('div', { className: "h-full w-full flex flex-col items-center justify-center p-6 fade-in bg-background overflow-y-auto" },
+                    React.createElement('div', { className: "w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-warm border-2 border-accent/40 float mb-6" }, React.createElement(Brain, { className: "w-14 h-14 text-accentDark" })),
+                    React.createElement('h1', { className: "text-4xl font-black text-primary mb-1" }, "Estimula+"),
+                    React.createElement('p', { className: "text-primary/60 mb-10 text-lg font-semibold" }, "Tu mente activa, tu día feliz 🌸"),
+                    React.createElement('div', { className: "w-full max-w-xs space-y-5" },
+                        React.createElement('div', { className: "relative flex flex-col items-center" },
+                            React.createElement('button', { onClick: () => userPhotoRef.current?.click(), className: "w-32 h-32 rounded-full bg-white border-4 border-accent/40 shadow-warm flex items-center justify-center overflow-hidden relative group" },
+                                tempPhoto ? React.createElement('img', { src: tempPhoto, className: "w-full h-full object-cover" }) : React.createElement(User, { className: "w-16 h-16 text-accent" }),
+                                React.createElement('div', { className: "absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100" }, React.createElement(Camera, { className: "text-white w-8 h-8" }))
+                            ),
+                            React.createElement('p', { className: "text-primary/40 text-sm mt-2 font-semibold" }, "Toca para añadir foto"),
+                            React.createElement('input', { type: "file", accept: "image/*", className: "hidden", ref: userPhotoRef, onChange: handleUserPhotoUpload })
+                        ),
+                        React.createElement('input', { type: "text", value: tempName, onChange: (e) => setTempName(e.target.value), placeholder: "¿Cómo te llamas?", className: "w-full p-5 bg-white border-2 border-transparent focus:border-accent rounded-2xl text-xl text-center outline-none font-bold shadow-card" }),
+                        React.createElement('div', { className: "flex gap-3" },
+                            users.length > 0 && React.createElement('button', { onClick: () => setGameState('select_profile'), className: "bg-surface text-primary/60 font-bold py-4 px-5 rounded-2xl btn-press" }, "Cancelar"),
+                            React.createElement('button', { onClick: handleCreateProfile, disabled: !tempName.trim(), className: `flex-1 font-extrabold text-xl py-5 rounded-2xl shadow-md btn-press ${tempName.trim() ? 'bg-primary text-white shadow-warm' : 'bg-gray-200 text-gray-400'}` }, "¡Empezar!")
+                        )
+                    )
+                );
+
+                if (gameState === 'gallery') return React.createElement(GameLayout, { title: "Ajustes de Fotos", soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'gallery', onHelp: setHelpModal },
+                    React.createElement('div', { className: "w-full h-full flex flex-col p-2 max-w-sm mx-auto" },
+                        React.createElement('div', { className: "bg-white rounded-3xl p-6 shadow-card mb-4" },
+                            React.createElement('h3', { className: "text-lg font-bold text-primary mb-4 text-center" }, "Imágenes en los Juegos"),
+                            React.createElement('div', { className: "flex flex-col gap-2" },
+                                ['default', 'custom', 'both'].map(pref => React.createElement('button', { key: pref, onClick: () => updateActiveUser({ imagePreference: pref }), className: `py-3 px-4 rounded-xl text-sm font-bold flex justify-between items-center ${activeUser.imagePreference === pref ? 'bg-primary text-white' : 'bg-surface text-primary/70'}` }, 
+                                    React.createElement('span', null, pref === 'default' ? "Solo Dibujos" : pref === 'custom' ? "Solo Mis Fotos" : "Dibujos y Fotos"),
+                                    activeUser.imagePreference === pref && React.createElement(CheckCircle, { className: "w-5 h-5" })
+                                ))
+                            )
+                        ),
+                        React.createElement('div', { className: "bg-white rounded-3xl p-5 shadow-card flex-1 flex flex-col min-h-0" },
+                            React.createElement('div', { className: "flex justify-between items-center mb-4" },
+                                React.createElement('h3', { className: "text-lg font-bold text-primary" }, `Mis Fotos (${customPhotos.length})`),
+                                React.createElement('button', { onClick: () => fileInputRef.current?.click(), className: "bg-accent text-primary px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-1 btn-press" }, React.createElement(Plus, { className: "w-4 h-4" }), "Añadir")
+                            ),
+                            React.createElement('div', { className: "flex-1 overflow-y-auto custom-scrollbar space-y-3" },
+                                customPhotos.length === 0 ? React.createElement('p', { className: "text-center text-primary/50 text-sm mt-10" }, "Sube fotos de tus seres queridos.") :
+                                customPhotos.map(photo => React.createElement('div', { key: photo.id, className: "flex items-center gap-3 bg-surface p-2 rounded-xl" },
+                                    React.createElement('img', { src: photo.url, className: "w-12 h-12 rounded-lg object-cover" }),
+                                    React.createElement('input', { type: "text", placeholder: "Nombre", className: "flex-1 p-2 bg-transparent outline-none text-primary font-medium", value: photo.name, onChange: (e) => updatePhotoName(photo.id, e.target.value) }),
+                                    React.createElement('button', { onClick: () => removePhoto(photo.id), className: "p-2 text-red-400" }, React.createElement(Trash2, { className: "w-5 h-5" }))
+                                ))
+                            ),
+                            React.createElement('input', { type: "file", multiple: true, accept: "image/*", className: "hidden", ref: fileInputRef, onChange: handlePhotoUpload })
+                        )
+                    )
+                );
+
+                if (gameState === 'assistance') return React.createElement(GameLayout, { title: "Asistencia", soundEnabled, setSoundEnabled, goHome: handleGoHome },
+                    React.createElement('div', { className: "w-full h-full flex flex-col gap-6 text-center max-w-sm mx-auto justify-center" },
+                        React.createElement('div', { className: "bg-white p-8 rounded-3xl shadow-card" },
+                            React.createElement('h3', { className: "text-2xl font-bold text-primary mb-4" }, "¿Necesitas ayuda?"),
+                            React.createElement('a', { href: "mailto:bytespcsoporte@gmail.com", className: "bg-surface p-4 rounded-2xl flex items-center justify-center gap-3 text-primary font-bold btn-press mb-2" }, React.createElement(Mail, { className: "w-6 h-6 text-accentDark" }), "Soporte"),
+                            React.createElement('a', { href: "https://www.instagram.com/bytespcsoporte/", target: "_blank", className: "bg-surface p-4 rounded-2xl flex items-center justify-center gap-3 text-primary font-bold btn-press" }, React.createElement(Instagram, { className: "w-6 h-6 text-accentDark" }), "@bytespcsoporte")
+                        )
+                    )
+                );
+
+                if (gameState === 'menu') return React.createElement('div', { className: "h-full w-full flex flex-col bg-background relative fade-in" },
+                    React.createElement('div', { className: "bg-white px-5 pt-5 pb-6 rounded-b-[2rem] shadow-soft z-10" },
+                        React.createElement('div', { className: "flex justify-between items-center mb-5" },
+                            React.createElement('div', { className: "flex items-center gap-3" },
+                                userPhoto ? React.createElement('img', { src: userPhoto, className: "w-16 h-16 rounded-full object-cover border-2 border-accent shadow-warm" }) : React.createElement('div', { className: "w-16 h-16 rounded-full bg-accent flex items-center justify-center text-white font-extrabold text-2xl shadow-warm" }, userName.charAt(0).toUpperCase()),
+                                React.createElement('div', null,
+                                    React.createElement('h1', { className: "text-2xl font-extrabold text-primary" }, `¡Hola, ${userName}!`),
+                                    React.createElement('p', { className: "text-primary/50 text-base" }, `Hoy es ${todayName}`)
+                                )
+                            ),
+                            React.createElement('button', { onClick: () => setSoundEnabled(!soundEnabled), className: `p-3 rounded-2xl ${soundEnabled ? 'bg-warmLight text-primary' : 'text-primary/30'}` }, soundEnabled ? React.createElement(Volume2, { className: "w-6 h-6" }) : React.createElement(VolumeX, { className: "w-6 h-6" }))
+                        ),
+                        React.createElement('button', { onClick: startDailyChallenge, className: "w-full bg-primary text-white p-5 rounded-2xl shadow-lg flex items-center justify-between btn-press pulse-warm" },
+                            React.createElement('div', { className: "text-left" },
+                                React.createElement('div', { className: "text-accent text-sm font-extrabold uppercase" }, streak >= 2 ? `🔥 Racha de ${streak} días` : "⭐ Reto de Hoy"),
+                                React.createElement('div', { className: "text-2xl font-extrabold" }, "Entrenamiento Diario"),
+                                React.createElement('div', { className: "text-white/60 text-sm" }, streak >= 2 ? "¡No la rompas!" : "Todos los juegos")
+                            ),
+                            React.createElement('div', { className: "bg-white/15 p-3 rounded-full" }, React.createElement(Play, { className: "w-8 h-8 fill-current" }))
+                        )
+                    ),
+                    React.createElement('div', { className: "flex-1 overflow-y-auto custom-scrollbar px-4 py-4 flex flex-col gap-4" },
+                        React.createElement('div', { className: "grid grid-cols-3 gap-3" },
+                            GAMES_LIST.map(g => React.createElement('button', { key: g.id, onClick: () => startGame(g.id, getUnlockedLevel(g.id)), className: "bg-white rounded-2xl p-3 shadow-card flex flex-col items-center justify-center gap-2 btn-press min-h-[90px]" },
+                                React.createElement('div', { className: `w-12 h-12 rounded-xl ${g.bg} flex items-center justify-center` }, React.createElement(g.icon, { className: `w-6 h-6 ${g.color}` })),
+                                React.createElement('span', { className: "font-extrabold text-primary text-xs text-center" }, g.title, g.subtitle ? ` ${g.subtitle}` : '')
+                            ))
+                        ),
+                        React.createElement('div', { className: "grid grid-cols-3 gap-3 pb-4" },
+                            React.createElement('button', { onClick: () => setGameState('progress'), className: "bg-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 font-extrabold text-primary shadow-card text-xs" }, React.createElement(ClipboardList, { className: "w-7 h-7 text-accentDark" }), "Registro"),
+                            React.createElement('button', { onClick: () => setGameState('gallery'), className: "bg-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 font-extrabold text-primary shadow-card text-xs" }, React.createElement(ImageIcon, { className: "w-7 h-7 text-accentDark" }), "Mis Fotos"),
+                            React.createElement('button', { onClick: () => setGameState('assistance'), className: "bg-white p-4 rounded-2xl flex flex-col items-center justify-center gap-2 font-extrabold text-primary shadow-card text-xs" }, React.createElement(Info, { className: "w-7 h-7 text-accentDark" }), "Ayuda")
+                        ),
+                        // --- BOTÓN DE DONACIÓN PERMANENTE ---
+                        React.createElement('div', { className: "pt-2 pb-6 flex flex-col items-center gap-4" },
+                            React.createElement('a', { 
+                                href: "https://ko-fi.com/bytespc", target: "_blank", rel: "noopener noreferrer",
+                                className: "flex items-center gap-2 text-[#FF5E5B] font-extrabold text-sm bg-[#FF5E5B]/10 px-4 py-2 rounded-xl btn-press hover:bg-[#FF5E5B]/20"
+                            }, React.createElement(Coffee, { className: "w-4 h-4" }), "Apoyar proyecto ☕"),
+                            React.createElement('button', { onClick: () => setGameState('select_profile'), className: "text-primary/40 text-sm px-4 py-2 btn-press font-bold rounded-xl hover:bg-surface" }, "Cambiar Usuario")
+                        )
+                    )
+                );
+
+                if (gameState === 'playing_memory') return React.createElement(GameLayout, { title: `Nivel ${currentLevel}`, soundEnabled, setSoundEnabled, goHome: handleGoHome, onRestart: () => startMemoryGame(currentLevel), helpKey: 'memory', onHelp: setHelpModal },
+                    React.createElement('div', { className: "grid gap-2 w-full max-w-xl mx-auto content-center h-full max-h-[80vh]", style: { gridTemplateColumns: `repeat(${cards.length <= 6 ? 2 : cards.length <= 12 ? 3 : 4}, minmax(0, 1fr))` } },
+                        cards.map((c, i) => {
+                            const isF = flippedIndices.includes(i) || matchedPairs.includes(c.id);
+                            return React.createElement('button', { key: c.uniqueId, onClick: () => { if (flippedIndices.includes(i) || matchedPairs.includes(c.id) || flippedIndices.length >= 2) return; if (soundEnabled) playSound('flip'); const nf = [...flippedIndices, i]; setFlippedIndices(nf); if (nf.length === 2) { if (cards[nf[0]].id === cards[nf[1]].id) { if (soundEnabled) setTimeout(() => playSound('match'), 200); setMatchedPairs(p => [...p, c.id]); setFlippedIndices([]); if (matchedPairs.length + 1 === cards.length / 2) setTimeout(() => winGame('memory', 'Memoria', currentLevel), 800); } else setTimeout(() => setFlippedIndices([]), 1500); } }, disabled: isF, className: "aspect-square rounded-2xl shadow-card relative bg-white border-4 border-white" },
+                                React.createElement('div', { className: `absolute inset-0 rounded-xl bg-accent flex items-center justify-center ${isF ? 'opacity-0' : 'opacity-100'}` }, React.createElement(Heart, { className: "text-white w-10 h-10", fill: "currentColor" })),
+                                React.createElement('div', { className: `absolute inset-0 rounded-xl bg-white flex items-center justify-center ${isF ? 'opacity-100' : 'opacity-0'}` }, renderCardContent(c))
+                            );
+                        })
+                    )
+                );
+
+                if (['playing_quiz', 'playing_sentences', 'playing_differences'].includes(gameState) && quizQuestion) {
+                    const isS = gameState === 'playing_sentences', isD = gameState === 'playing_differences';
+                    return React.createElement(GameLayout, { title: `${isD ? "Ronda" : isS ? "Frase" : "Pregunta"} ${quizRound}/10`, soundEnabled, setSoundEnabled, goHome: handleGoHome, onRestart: () => startGame(isS ? 'sentences' : isD ? 'differences' : 'quiz', currentLevel), helpKey: isS ? 'sentences' : isD ? 'differences' : 'quiz', onHelp: setHelpModal },
+                        React.createElement('div', { className: "mb-6 text-center w-full max-w-md" },
+                            isS ? React.createElement('p', { className: "bg-white p-6 rounded-3xl text-xl font-bold" }, quizQuestion.text) :
+                            isD ? React.createElement('p', { className: "bg-white p-4 rounded-3xl text-xl font-bold" }, "¿Cuál es diferente?") :
+                            React.createElement(React.Fragment, null, React.createElement('p', { className: "text-primary/60 text-lg" }, "¿Cuál es?"), React.createElement('h2', { className: "text-3xl font-extrabold text-primary bg-white p-4 rounded-3xl inline-block" }, quizQuestion.target.name))
+                        ),
+                        React.createElement('div', { className: `grid ${getGridClass(quizQuestion.options.length)} gap-3 w-full max-w-2xl` },
+                            quizQuestion.options.map((opt, i) => {
+                                let isC = isD ? quizFeedback === 'correct' && opt.isTarget : quizFeedback === 'correct' && opt.id === quizQuestion.target.id;
+                                return React.createElement('button', { key: i, onClick: () => { if (quizFeedback) return; let correct = isD ? opt.isTarget : opt.id === quizQuestion.target.id; if (correct) { setQuizFeedback('correct'); if (soundEnabled) playSound('correct'); setTimeout(() => { if (quizRound >= 10) winGame(isS ? 'sentences' : isD ? 'differences' : 'quiz', 'Juego', currentLevel); else { setQuizRound(p => p + 1); if (isS) generateSentenceQuestion(currentLevel); else if (isD) generateDifferenceQuestion(currentLevel); else generateQuizQuestion(currentLevel); } }, 1500); } else if (soundEnabled) playSound('flip'); }, className: `w-full h-full rounded-3xl shadow-card flex items-center justify-center bg-white border-4 ${isC ? 'border-green-400 scale-105' : 'border-white btn-press'}` },
+                                    React.createElement('div', { className: "w-full h-full flex items-center justify-center p-2" }, opt.isCustom ? React.createElement('img', { src: opt.url, className: "max-w-[80px] max-h-[80px] object-cover rounded-xl" }) : React.createElement(opt.icon, { className: `w-12 h-12 ${opt.color}`, strokeWidth: 1.5 }))
+                                );
+                            })
+                        )
+                    );
+                }
+
+                if (gameState === 'playing_puzzle' && puzzleTarget) return React.createElement(GameLayout, { title: `Puzzle`, soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'puzzle', onHelp: setHelpModal },
+                    React.createElement('h2', { className: "text-2xl font-bold mb-4" }, puzzleTarget.name),
+                    React.createElement('div', { className: "mb-6 p-3 bg-white rounded-3xl shadow-soft" }, React.createElement(puzzleTarget.icon, { className: `w-12 h-12 ${puzzleTarget.color}` })),
+                    React.createElement('div', { className: "grid grid-cols-2 gap-1 bg-white p-2 rounded-2xl shadow-card", style: { width: 'min(80vw, 320px)', height: 'min(80vw, 320px)' } },
+                        puzzlePieces.map((p, i) => React.createElement('button', { key: i, onClick: () => { if (quizFeedback === 'correct') return; if (puzzleSelected === null) setPuzzleSelected(i); else { const n = [...puzzlePieces]; n[i] = puzzlePieces[puzzleSelected]; n[puzzleSelected] = p; setPuzzlePieces(n); setPuzzleSelected(null); if (n.every((v, idx) => v === idx)) { setQuizFeedback('correct'); if (soundEnabled) playSound('win'); setTimeout(() => winGame('puzzle', 'Puzzle', currentLevel), 1500); } } }, className: `relative w-full h-full overflow-hidden rounded-xl ${puzzleSelected === i ? 'ring-4 ring-accent' : ''} bg-surface` },
+                            React.createElement('div', { className: "absolute w-[200%] h-[200%] flex items-center justify-center", style: { top: p === 2 || p === 3 ? '-100%' : '0', left: p === 1 || p === 3 ? '-100%' : '0' } }, React.createElement(puzzleTarget.icon, { className: `w-3/5 h-3/5 ${puzzleTarget.color}` }))
+                        ))
+                    )
+                );
+
+                if (gameState === 'playing_music') return React.createElement(GameLayout, { title: `Música`, soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'music', onHelp: setHelpModal },
+                    React.createElement('div', { className: "flex flex-col items-center w-full max-w-sm" },
+                        React.createElement('h2', { className: "text-2xl font-bold mb-8" }, isShowingMusic ? "Escucha..." : "¡Tu turno!"),
+                        React.createElement('div', { className: "grid grid-cols-2 gap-4 w-full aspect-square" },
+                            ['bg-red-500', 'bg-green-500', 'bg-blue-500', 'bg-yellow-400'].map((c, i) => React.createElement('button', { key: i, disabled: isShowingMusic, onClick: () => { if (isShowingMusic) return; if (soundEnabled) playGameNote(i, 0.4); setActiveNote(i); setTimeout(() => setActiveNote(null), 300); const u = [...userMusicSequence, i]; setUserMusicSequence(u); if (u[u.length - 1] !== musicSequence[u.length - 1]) { setTimeout(() => playSequence(musicSequence, currentLevel), 1000); } else if (u.length === musicSequence.length) { if (quizRound >= 10) setTimeout(() => winGame('music', 'Música', currentLevel), 1000); else { setQuizRound(p => p + 1); setTimeout(() => generateNextMusicSequence(musicSequence, currentLevel), 1000); } } }, className: `rounded-3xl border-4 border-white ${c} ${activeNote === i ? 'opacity-50 scale-95' : 'shadow-card'}` }))
+                        )
+                    )
+                );
+
+                if (gameState === 'playing_recall' && quizQuestion) return React.createElement(GameLayout, { title: `Fugaz`, soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'recall_word', onHelp: setHelpModal },
+                    recallPhase === 'memorize' ? React.createElement('div', { className: "flex flex-col items-center" },
+                        React.createElement('h2', { className: "text-3xl font-bold mb-8" }, "¡Fíjate bien!"),
+                        React.createElement('div', { className: "bg-white p-8 rounded-[2.5rem] shadow-card border-4 border-accent mb-8 w-full max-w-[14rem] aspect-square flex items-center justify-center" }, React.createElement(quizQuestion.target.icon, { className: `w-24 h-24 ${quizQuestion.target.color}` })),
+                        React.createElement('div', { className: "text-6xl font-extrabold text-accentDark" }, timeLeft)
+                    ) : React.createElement('div', { className: "flex flex-col items-center w-full max-w-2xl" },
+                        React.createElement('h2', { className: "text-2xl font-bold mb-6" }, "¿Qué era?"),
+                        React.createElement('div', { className: `grid ${getGridClass(quizQuestion.options.length)} gap-3 w-full` },
+                            quizQuestion.options.map((opt, i) => React.createElement('button', { key: i, onClick: () => { if (quizFeedback || recallPhase !== 'answer') return; if (opt.id === quizQuestion.target.id) { setQuizFeedback('correct'); if (soundEnabled) playSound('correct'); setTimeout(() => { if (quizRound >= 5) winGame(recallMode === 'word' ? 'recall_word' : 'recall_image', 'Fugaz', currentLevel); else { setQuizRound(p => p + 1); generateRecallQuestion(currentLevel); } }, 1500); } else if (soundEnabled) playSound('flip'); }, className: `w-full h-full rounded-3xl shadow-card flex items-center justify-center bg-white border-4 ${quizFeedback === 'correct' && opt.id === quizQuestion.target.id ? 'border-green-400 scale-105' : 'border-white btn-press'}` },
+                                recallMode === 'word' ? React.createElement('span', { className: "text-xl font-bold p-2 text-center" }, opt.name) : React.createElement(opt.icon, { className: `w-12 h-12 ${opt.color}` })
+                            ))
+                        )
+                    )
+                );
+
+                if (gameState === 'playing_wordsearch') return React.createElement(GameLayout, { title: `Letras`, soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'wordsearch', onHelp: setHelpModal },
+                    React.createElement('div', { className: "flex flex-col items-center w-full max-w-md mx-auto" },
+                        React.createElement('div', { className: "mb-4 flex gap-2 flex-wrap justify-center" },
+                            wordSearchWords.map((w, i) => React.createElement('span', { key: i, className: `px-3 py-1 rounded-xl text-sm font-bold ${w.found ? 'bg-green-100 text-green-700 line-through' : 'bg-white text-primary'}` }, w.original))
+                        ),
+                        React.createElement('div', { className: "bg-white p-2 rounded-2xl shadow-card grid gap-1 w-full aspect-square", style: { gridTemplateColumns: `repeat(${wordSearchGrid.length}, minmax(0, 1fr))` } },
+                            wordSearchGrid.map((row, r) => row.map((l, c) => React.createElement('button', { key: `${r}-${c}`, onClick: () => handleWordSearchClick(r, c), className: `w-full h-full flex items-center justify-center font-bold text-lg rounded-lg ${wordSearchSelection.some(s => s[0] === r && s[1] === c) ? 'bg-blue-400 text-white' : wordSearchFoundCells.includes(`${r},${c}`) ? 'bg-green-400 text-white' : 'bg-surface text-primary'}` }, l)))
+                        )
+                    )
+                );
+
+                if (gameState === 'levelSelect') {
+                    const cLvl = getUnlockedLevel(levelSelectMode);
+                    return React.createElement(GameLayout, { title: `Niveles`, soundEnabled, setSoundEnabled, goHome: handleGoHome },
+                        React.createElement('div', { className: "grid grid-cols-5 gap-2 overflow-y-auto pb-4 w-full h-full content-start custom-scrollbar" },
+                            Array.from({length: 50}, (_, i) => i + 1).map(lvl => React.createElement('button', { key: lvl, disabled: lvl > cLvl, onClick: () => startGame(levelSelectMode, lvl), className: `aspect-square rounded-2xl flex items-center justify-center font-bold text-lg ${lvl > cLvl ? 'bg-surface text-primary/20' : 'bg-white text-primary shadow-sm btn-press'}` }, lvl > cLvl ? React.createElement(Lock, { className: "w-4 h-4" }) : lvl))
+                        )
+                    );
+                }
+
+                if (gameState === 'progress') return React.createElement(GameLayout, { title: "Progreso", soundEnabled, setSoundEnabled, goHome: handleGoHome, helpKey: 'progress', onHelp: setHelpModal },
+                    React.createElement('div', { className: "w-full h-full flex flex-col max-w-lg mx-auto" },
+                        React.createElement('div', { className: "bg-primary p-6 rounded-3xl mb-4 text-white flex justify-between" },
+                            React.createElement('div', null, React.createElement('p', { className: "text-white/60 text-xs" }, "Días"), React.createElement('p', { className: "text-3xl font-black" }, new Set(history.map(h => new Date(h.date).toDateString())).size)),
+                            React.createElement('div', null, React.createElement('p', { className: "text-white/60 text-xs" }, "Partidas"), React.createElement('p', { className: "text-3xl font-black" }, activeUser.totalGames || history.length)),
+                            React.createElement('div', null, React.createElement('p', { className: "text-white/60 text-xs" }, "Racha"), React.createElement('p', { className: "text-3xl font-black" }, streak))
+                        ),
+                        React.createElement('div', { className: "flex-1 overflow-y-auto space-y-3 custom-scrollbar" },
+                            history.map(r => React.createElement('div', { key: r.id, className: "bg-white p-4 rounded-2xl shadow-card flex justify-between" },
+                                React.createElement('span', { className: "font-bold" }, r.game),
+                                React.createElement('span', { className: "text-accentDark font-bold" }, r.details)
+                            ))
+                        )
+                    )
+                );
+
+                if (gameState === 'won') {
+                    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    return React.createElement('div', { className: "min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden bg-background" },
+                        !reduce && Array.from({length: 18}).map((_, i) => React.createElement('div', { key: i, className: "confetti", style: { backgroundColor: ['#F4A460', '#FF8C69', '#FFD700', '#98FB98'][i%4], left: `${5 + (i*5.3)%90}%`, top: '-20px', animationDelay: `${i*0.12}s`, animationDuration: `${2.5 + (i%4)*0.4}s` } })),
+                        React.createElement('div', { className: "bg-white p-10 rounded-[2.5rem] shadow-2xl border-4 border-accent/30 max-w-md w-full pop-in z-10" },
+                            React.createElement('div', { className: "text-7xl mb-4 float" }, "🌟"),
+                            React.createElement('h2', { className: "text-4xl font-black text-primary mb-2" }, "¡Fantástico!"),
+                            isTraining ? (trainingQueue.length > 0 ? React.createElement('button', { onClick: () => { const n = trainingQueue[0]; setTrainingQueue(trainingQueue.slice(1)); startGame(n, getUnlockedLevel(n)); }, className: "w-full bg-primary text-white text-xl font-extrabold py-5 rounded-2xl shadow-lg btn-press" }, "Siguiente Juego →") : React.createElement('button', { onClick: handleGoHome, className: "w-full bg-primary text-white text-xl font-extrabold py-5 rounded-2xl shadow-lg btn-press" }, "Ver Inicio")) :
+                            React.createElement('button', { onClick: handleGoHome, className: "w-full bg-primary text-white text-xl font-extrabold py-5 rounded-2xl shadow-lg btn-press" }, "🏠 Volver al Menú")
+                        )
+                    );
+                }
+                return null;
+            }
+
+            function renderHelpModal() {
+                if (!helpModal) return null;
+                const info = GAME_INFO[helpModal];
+                return React.createElement('div', { className: "fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4", onClick: () => setHelpModal(null) },
+                    React.createElement('div', { className: "bg-white rounded-3xl p-7 shadow-2xl max-w-sm w-full text-center", onClick: e => e.stopPropagation() },
+                        React.createElement('h3', { className: "text-2xl font-extrabold text-primary mb-4" }, info.title),
+                        React.createElement('p', { className: "text-primary/80 mb-4 text-lg" }, info.desc),
+                        React.createElement('p', { className: "bg-warmLight p-4 rounded-2xl mb-6 text-left text-sm" }, info.example),
+                        React.createElement('button', { onClick: () => setHelpModal(null), className: "w-full bg-primary text-white font-extrabold py-4 rounded-2xl btn-press text-lg" }, "¡Entendido!")
+                    )
+                );
+            }
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(RootErrorBoundary, null, React.createElement(App)));
+    </script>
+</body>
+</html>
